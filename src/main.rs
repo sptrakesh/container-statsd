@@ -31,7 +31,7 @@ enum Mode {
 }
 
 #[derive(Parser, Debug)]
-#[command(version, about, long_about = None)]
+#[command(version, about, long_about = None, ignore_errors(true))]
 struct Cli {
   /// The host name to add to the published data.  Generally the name of the host docker daemon is running on.
   #[arg(short = 'n', long = "node")]
