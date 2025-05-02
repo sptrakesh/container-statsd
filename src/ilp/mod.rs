@@ -1,7 +1,7 @@
 use std::collections::HashMap;
 use chrono::{DateTime, Utc};
-
 use float_ord::sort;
+use log::info;
 use questdb::{
   Result,
   ingress::{
@@ -11,12 +11,12 @@ use questdb::{
   },
 };
 
-use super::Cli;
+use super::{Cli, Mode};
 use super::stats::{Measurement, Stats, IO};
 
 pub fn gather(cli: &Cli, stats: Vec<Stats>) -> Vec<Stats>
 {
-  if cfg!(target_os = "macos") { println!("Aggregating {:?} container statistics.", stats.len()); }
+  info!("Aggregating {:?} container statistics for {}.", stats.len(), cli.host);
   let mut cpu : HashMap<String, Vec<f64>> = HashMap::new();
   let mut mem : HashMap<String, Vec<f64>> = HashMap::new();
   let mut memper : HashMap<String, Vec<f64>> = HashMap::new();
@@ -55,16 +55,16 @@ pub fn gather(cli: &Cli, stats: Vec<Stats>) -> Vec<Stats>
 
   let mut vec : Vec<Stats> = Vec::with_capacity(32);
 
-  fn compute(mode: &String, values: &mut Vec<f64>) -> f64
+  fn compute(mode: Mode, values: &mut Vec<f64>) -> f64
   {
-    if mode == "avg" { return values.iter().sum::<f64>() / (values.len() as f64); }
+    if mode == Mode::Avg { return values.iter().sum::<f64>() / (values.len() as f64); }
     sort(values);
     values[values.len() - 1]
   }
 
-  fn compute_pids(mode: &String, values: &Vec<u32>) -> u32
+  fn compute_pids(mode: Mode, values: &Vec<u32>) -> u32
   {
-    if mode == "avg" { return values.iter().sum::<u32>() / (values.len() as u32); }
+    if mode == Mode::Avg { return values.iter().sum::<u32>() / (values.len() as u32); }
     *values.iter().max().unwrap()
   }
 
@@ -76,7 +76,7 @@ pub fn gather(cli: &Cli, stats: Vec<Stats>) -> Vec<Stats>
     st.container = stats[0].container.clone();
     st.totalMemory.value = stats[0].totalMemory.value;
     st.totalMemory.unit = stats[0].totalMemory.unit.clone();
-    st.cpuPercentage = compute(&cli.mode, values);
+    st.cpuPercentage = compute(cli.mode, values);
     vec.push(st);
   }
 
@@ -84,47 +84,47 @@ pub fn gather(cli: &Cli, stats: Vec<Stats>) -> Vec<Stats>
   {
     let stat = vec.iter_mut().find(|s| s.name == *name).unwrap();
     stat.memoryUsage.unit = stats[0].memoryUsage.unit.clone();
-    stat.memoryUsage.value = compute(&cli.mode, values);
+    stat.memoryUsage.value = compute(cli.mode, values);
   }
 
   for (name, values) in &mut memper
   {
     let stat = vec.iter_mut().find(|s| s.name == *name).unwrap();
-    stat.memoryPercentage = compute(&cli.mode, values);
+    stat.memoryPercentage = compute(cli.mode, values);
   }
 
   for (name, values) in &mut bioin
   {
     let stat = vec.iter_mut().find(|s| s.name == *name).unwrap();
     stat.blockIO.incoming.unit = stats[0].blockIO.incoming.unit.clone();
-    stat.blockIO.incoming.value = compute(&cli.mode, values);
+    stat.blockIO.incoming.value = compute(cli.mode, values);
   }
 
   for (name, values) in &mut bioout
   {
     let stat = vec.iter_mut().find(|s| s.name == *name).unwrap();
     stat.blockIO.outgoing.unit = stats[0].blockIO.outgoing.unit.clone();
-    stat.blockIO.outgoing.value = compute(&cli.mode, values);
+    stat.blockIO.outgoing.value = compute(cli.mode, values);
   }
 
   for (name, values) in &mut netin
   {
     let stat = vec.iter_mut().find(|s| s.name == *name).unwrap();
     stat.netIO.incoming.unit = stats[0].netIO.incoming.unit.clone();
-    stat.netIO.incoming.value = compute(&cli.mode, values);
+    stat.netIO.incoming.value = compute(cli.mode, values);
   }
 
   for (name, values) in &mut netout
   {
     let stat = vec.iter_mut().find(|s| s.name == *name).unwrap();
     stat.netIO.outgoing.unit = stats[0].netIO.outgoing.unit.clone();
-    stat.netIO.outgoing.value = compute(&cli.mode, values);
+    stat.netIO.outgoing.value = compute(cli.mode, values);
   }
 
   for (name, values) in &pids
   {
     let stat = vec.iter_mut().find(|s| s.name == *name).unwrap();
-    stat.pids = compute_pids(&cli.mode, values);
+    stat.pids = compute_pids(cli.mode, values);
   }
 
   vec
@@ -132,6 +132,7 @@ pub fn gather(cli: &Cli, stats: Vec<Stats>) -> Vec<Stats>
 
 pub fn publish(cli: &Cli, stats: Vec<Stats>, time: DateTime<Utc>) -> Result<()>
 {
+  info!("Publishing {:?} container statistics for {}.", stats.len(), cli.host);
   let uri = {
     if cfg!(target_os = "macos") { "tcp::addr=localhost:9009".to_string() }
     else { format!("tcp::addr={}:9009", cli.questdb) }
@@ -185,6 +186,6 @@ pub fn publish(cli: &Cli, stats: Vec<Stats>, time: DateTime<Utc>) -> Result<()>
   }
 
   sender.flush(&mut buffer)?;
-  if cfg!(target_os = "macos") { println!("Published {:?} container statistics.", stats.len()); }
+  info!("Published {:?} container statistics for {}.", stats.len(), cli.host);
   Ok(())
 }
