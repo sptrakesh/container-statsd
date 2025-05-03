@@ -1,14 +1,14 @@
 [Unit]
 Description=Publish docker stats to QuestDB
 DefaultDependencies=no
-After=network.target
+After=docker.service
 Before=multi-user.target
 
 [Service]
 Environment="RUST_BACKTRACE=1"
-Environment="RUST_LOG=debug"
-Type=exec
-ExecStart=/home/ec2-user/docker/container-statsd --node prod0 --questdb 10.0.13.130 --mode max
+Environment="RUST_LOG=info"
+Type=notify
+ExecStart=/home/ec2-user/docker/container-statsd --node $HOST_NODE --questdb 10.0.13.130 --mode max
 Restart=always
 
 [Install]

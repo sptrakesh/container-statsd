@@ -1,13 +1,17 @@
 mod ilp;
 mod stats;
 
-use std::io::{BufRead, BufReader};
+use std::io::{BufRead, BufReader, Error};
 use std::process::Command;
 use std::thread;
+use std::sync::Arc;
+use std::sync::atomic::{AtomicBool, Ordering};
+use std::thread::JoinHandle;
 use chrono::{DateTime, DurationRound, TimeDelta, Utc};
 use clap::Parser;
 use clap_num::number_range;
 use log::{info, debug};
+#[cfg(target_os = "linux")]
 use sd_notify::{notify, NotifyState};
 use serde::{Deserialize};
 
@@ -58,33 +62,42 @@ impl Cli
   }
 }
 
-fn main()
+fn main() -> Result<(), Error>
 {
+  let term = Arc::new(AtomicBool::new(false));
+  signal_hook::flag::register(signal_hook::consts::SIGTERM, Arc::clone(&term)).expect("Error setting SIGTERM handler");
+  signal_hook::flag::register(signal_hook::consts::SIGINT, Arc::clone(&term)).expect("Error setting SIGTERM handler");
+  
   let args = Cli::parse();
   simple_logger::init_with_env().unwrap();
-  if cfg!(target_os = "linux") { let _ = notify(true, &[NotifyState::Ready]); }
 
+  #[cfg(target_os = "linux")]
+  let _ = notify(true, &[NotifyState::Ready]);
+
+  let mut handle : Option<JoinHandle<()>> = None;
   let size = (args.interval as usize) * 60 * 32;
   let mut vec : Vec<Stats> = Vec::with_capacity(size);
   let mut published : DateTime<Utc> = Utc::now().duration_round_up(TimeDelta::try_minutes(args.interval as i64).unwrap()).unwrap();
   info!("Publishing stats at {:?} for {}", published, args.host);
 
-  loop
+  while !term.load(Ordering::Relaxed)
   {
     let records = read();
     vec.extend(records);
     debug!("Gathered {:?} statistics for {}", vec.len(), args.host);
-    if cfg!(target_os = "linux") { let _ = notify(true, &[NotifyState::Watchdog, NotifyState::Status(format!("Gathered statistics for {}", args.host).as_str())]); }
+    
+    #[cfg(target_os = "linux")]
+    let _ = notify(true, &[NotifyState::Watchdog, NotifyState::Status(format!("Gathered statistics for {}", args.host).as_str())]);
 
     if Utc::now() > published
     {
       if vec.len() > 0
       {
         let copy = args.clone();
-        thread::spawn(move || {
+        handle = Some(thread::spawn(move || {
           let data = gather(&copy, vec);
           publish(&copy, data, published).expect("Failed to publish stats");
-        });
+        }));
 
         published = Utc::now().duration_round_up(TimeDelta::try_minutes(args.interval as i64).unwrap()).unwrap();
         info!("Publishing stats at {:?} for {}", published, args.host);
@@ -92,6 +105,10 @@ fn main()
       }
     }
   }
+  
+  if handle.is_some() { handle.take().unwrap().join().unwrap(); }
+
+  Ok(())
 }
 
 fn read() -> Vec<Stats>
