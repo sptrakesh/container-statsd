@@ -5,11 +5,12 @@ After=docker.service
 Before=multi-user.target
 
 [Service]
-Environment="RUST_BACKTRACE=1"
 Environment="RUST_LOG=info"
 Type=notify
-ExecStart=/home/ec2-user/docker/container-statsd --node $HOST_NODE --questdb 10.0.13.130 --mode max
+ExecStart=/home/ec2-user/docker/container-statsd --node $HOST_NODE --questdb $NODEM --mode max
 Restart=always
+NotifyAccess=main
+WatchdogSec=30s
 
 [Install]
 WantedBy=default.target

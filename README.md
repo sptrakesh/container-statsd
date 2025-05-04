@@ -6,11 +6,15 @@ job runs, etc.
 
 ## Command line arguments
 The following arguments are supported for running the process:
-* `-n|--node` The host name to add to the published data.  Generally the name of the host docker daemon is running on.
+* `-n|--node` The host name to add to the published data.  Generally the name
+  of the host docker daemon is running on.
 * `-m|--mode` The mode to use when publishing to QuestDB.  Defaults to `avg`.
 * `-q|--questdb` The QuestDB host to publish to.  Defaults to `localhost`.
 * `-t|--table` The series name to publish to.  Defaults to `containerStats`.
-* `-i|--interval` The interval in minutes for which statistics are aggregated.  Defaults to `5` minutes.  Must be between `1` and `15`.
+* `-i|--interval` The interval in minutes for which statistics are aggregated.
+  Defaults to `5` minutes. Must be between `1` and `15`.
+* `-w|--watchdog` *Linux only!*.  Enable or disable systemd watchdog notifications.
+  If enabled, the systemd service unit **must** have `WatchdogSec` set.
 
 ## Run
 Service will typically be run as a *service* through *systemd*.  The service
