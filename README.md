@@ -29,16 +29,3 @@ systemctl --user enable container-statsd.service
 systemctl --user start container-statsd.service
 systemctl status container-statsd.service
 ```
-
-**Note:** For some inexplicable reason, `systemd` keeps restarting the process
-at very frequent intervals (few seconds) when no log output is generated from
-the process.  The service also sends `WATCHDOG=1` with `sd_notify` every other second
-or so, but still the service is restarted (at least on AL 2023).  To get around this
-`debug` log messages are emitted by the process, which seems to keep `systemd`
-*thinking* the process is *alive*.
-
-To follow the service logs, use `systemctl` or `journalctl` as shown:
-```shell
-systemctl --user status container-statsd.service --full -n100
-journalctl -f --user-unit container-statsd
-```
