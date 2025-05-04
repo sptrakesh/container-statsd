@@ -27,5 +27,10 @@ cp <path to checked out source>/systemd/container-statsd.service ~/.config/syste
 systemctl --user daemon-reload
 systemctl --user enable container-statsd.service
 systemctl --user start container-statsd.service
-systemctl status container-statsd.service
+```
+
+To follow the service logs, use `systemctl` or `journalctl` as shown:
+```shell
+systemctl --user status container-statsd.service --full -n100
+journalctl -f --user-unit container-statsd
 ```
