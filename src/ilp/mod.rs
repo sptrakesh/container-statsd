@@ -1,4 +1,6 @@
 use std::collections::HashMap;
+use std::ffi::{OsString};
+use sysinfo::Disks;
 use chrono::{DateTime, Utc};
 use float_ord::sort;
 use log::info;
@@ -148,13 +150,11 @@ pub fn publish(cli: &Cli, stats: Vec<Stats>, time: DateTime<Utc>) -> Result<()>
       if measurement.unit == "KB" { return measurement.value * 1024.0; }
       else if measurement.unit == "MB" { return measurement.value * 1024.0 * 1024.0; }
       else if measurement.unit == "GB" { return measurement.value * 1024.0 * 1024.0 * 1024.0; }
-      measurement.value as f64
+      measurement.value
     }
     
     buffer.column_f64(format!("{}_in", prefix).as_str(), bytes(&io.incoming)).expect(format!("Failed to add incoming {} IO", prefix).as_str());
-    buffer.column_str(format!("{}_in_unit", prefix).as_str(), "bytes").expect(format!("Failed to add IO {} unit", prefix).as_str());
     buffer.column_f64(format!("{}_out", prefix).as_str(), bytes(&io.outgoing)).expect(format!("Failed to add outgoing {} IO", prefix).as_str());
-    buffer.column_str(format!("{}_out_unit", prefix).as_str(), "bytes").expect(format!("Failed to add IO {} unit", prefix).as_str());
   }
   
   fn add_memory(buffer: &mut Buffer, measurement: &Measurement, prefix: &str)
@@ -163,7 +163,6 @@ pub fn publish(cli: &Cli, stats: Vec<Stats>, time: DateTime<Utc>) -> Result<()>
     if measurement.unit == "KiB" { buffer.column_f64(prefix, measurement.value * 1024.0).expect("Failed to add memory KiB"); }
     if measurement.unit == "MiB" { buffer.column_f64(prefix, measurement.value * 1024.0 * 1024.0).expect("Failed to add memory MiB"); }
     if measurement.unit == "GiB" { buffer.column_f64(prefix, measurement.value * 1024.0 * 1024.0 * 1024.0).expect("Failed to add memory GiB"); }
-    buffer.column_str(format!("{}_unit", prefix).as_str(), "bytes").expect("Failed to add memory unit");
   }
   
   for stat in &stats
@@ -184,8 +183,40 @@ pub fn publish(cli: &Cli, stats: Vec<Stats>, time: DateTime<Utc>) -> Result<()>
     
     buffer.at(TimestampNanos::from_datetime(time)?)?;
   }
+  
+  disk_usage(cli, &mut buffer, time)?;
 
   sender.flush(&mut buffer)?;
   info!("Published {:?} container statistics for {}.", stats.len(), cli.host);
+  Ok(())
+}
+
+fn disk_usage(cli: &Cli, buf: &mut Buffer, time: DateTime<Utc>) -> Result<()>
+{
+  if cli.disks.is_empty() { return Ok(()); }
+  
+  let disks = Disks::new_with_refreshed_list();
+  for disk in disks.list()
+  {
+    for name in &cli.disks
+    {
+      if disk.name() ==  OsString::from(name)
+      {
+        buf.table(cli.disk_table.as_str())?.
+            symbol("host", cli.host.clone())?.
+            symbol("name", disk.name().to_str().unwrap().to_string())?.
+            symbol("file_system", disk.file_system().to_str().unwrap().to_string())?.
+            symbol("mount_point", disk.mount_point().to_str().unwrap().to_string())?.
+            symbol("type", disk.kind().to_string())?.
+            column_i64("available_space", disk.available_space() as i64)?.
+            column_f64("percentage_use", (disk.available_space() as f64)/(disk.total_space() as f64) * 100.0)?.
+            column_i64("read_bytes", disk.usage().read_bytes as i64)?.
+            column_i64("write_bytes", disk.usage().written_bytes as i64)?.
+            at(TimestampNanos::from_datetime(time)?)?;
+        info!("Added disk statistics for {} on {}.", name, cli.host);
+      }
+    }
+  }
+  
   Ok(())
 }

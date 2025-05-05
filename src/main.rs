@@ -54,6 +54,12 @@ enum Watchdog {
 #[derive(Parser, Debug, Clone)]
 #[command(version, about, long_about = None, ignore_errors(true))]
 struct Cli {
+  /// Optional list of disk names for which disk usage statistics are to be captured.
+  #[clap(short, long)]
+  disks: Vec<String>,
+  /// The series name to publish disk information to.  Defaults to diskStats.
+  #[arg(short = 'b', long, default_value = "diskStats")]
+  disk_table: String,
   /// The host name to add to the published data.  Generally the name of the host docker daemon is running on.
   #[arg(short = 'n', long = "node")]
   host: String,
