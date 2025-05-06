@@ -6,8 +6,8 @@ job runs, etc.
 
 ## Command line arguments
 The following arguments are supported for running the process:
-* `-d|--disks` Optional list of disk names for which disk usage statistics are to be captured.
-* `-b|--disk-table` The series name to publish disk information to.  Defaults to `diskStats`.
+* `-b|--block-device` Optional list of disk/volume/block device names for which disk usage statistics are to be captured.
+* `-d|--disk-table` The series name to publish disk information to.  Defaults to `diskStats`.
 * `-n|--node` The host name to add to the published data.  Generally the name
   of the host docker daemon is running on.
 * `-m|--mode` The mode to use when publishing to QuestDB.  Defaults to `avg`.
