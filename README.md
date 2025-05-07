@@ -12,9 +12,11 @@ The following arguments are supported for running the process:
   of the host docker daemon is running on.
 * `-m|--mode` The mode to use when publishing to QuestDB.  Defaults to `avg`.
 * `-q|--questdb` The QuestDB host to publish to.  Defaults to `localhost`.
-* `-t|--table` The series name to publish to.  Defaults to `containerStats`.
+* `-s|--stats-table` The series name to publish to.  Defaults to `containerStats`.
 * `-i|--interval` The interval in minutes for which statistics are aggregated.
   Defaults to `5` minutes. Must be between `1` and `15`.
+* `-t|--transport-protocol` The QuestDB ILP transport protocol to use. Default `tcp`.
+* `-p|--port` The port on which the QuestDB ILP service is listening.  Default `9009`.
 * `-w|--watchdog` *Linux only!*.  Enable or disable systemd watchdog notifications.
   If enabled, the systemd service unit **must** have `WatchdogSec` set.
 
