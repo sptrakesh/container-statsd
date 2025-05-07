@@ -7,8 +7,10 @@ use log::info;
 use questdb::{
   Result,
   ingress::{
-    Sender,
     Buffer,
+    ColumnName,
+    Sender,
+    TableName,
     TimestampNanos
   },
 };
@@ -134,14 +136,20 @@ pub fn gather(cli: &Cli, stats: Vec<Stats>) -> Vec<Stats>
 
 pub fn publish(cli: &Cli, stats: Vec<Stats>, time: DateTime<Utc>) -> Result<()>
 {
-  info!("Publishing {:?} container statistics for {}.", stats.len(), cli.host);
-  let uri = {
-    if cfg!(target_os = "macos") { "tcp::addr=localhost:9009".to_string() }
-    else { format!("tcp::addr={}:9009", cli.questdb) }
-  };
+  let uri = format!("{:?}::addr={}:{}", cli.protocol, cli.questdb, cli.port);
+  info!("Publishing {:?} container statistics for {} to {}.", stats.len(), cli.host, uri);
 
   let mut sender = Sender::from_conf(uri)?;
   let mut buffer = Buffer::new();
+  let table = TableName::new(cli.table.as_str())?;
+  
+  let chost = ColumnName::new("host")?;
+  let ccontainer = ColumnName::new("container")?;
+  let cname = ColumnName::new("name")?;
+  let cid = ColumnName::new("id")?;
+  let ccpu = ColumnName::new("cpu")?;
+  let cmp = ColumnName::new("memory_percentage")?;
+  let cpids = ColumnName::new("pids")?;
   
   fn add_io(buffer: &mut Buffer, io: &IO, prefix: &str)
   {
@@ -157,24 +165,24 @@ pub fn publish(cli: &Cli, stats: Vec<Stats>, time: DateTime<Utc>) -> Result<()>
     buffer.column_f64(format!("{}_out", prefix).as_str(), bytes(&io.outgoing)).expect(format!("Failed to add outgoing {} IO", prefix).as_str());
   }
   
-  fn add_memory(buffer: &mut Buffer, measurement: &Measurement, prefix: &str)
+  fn add_memory(buffer: &mut Buffer, measurement: &Measurement, column: &str)
   {
-    if measurement.unit == "B" { buffer.column_f64(prefix, measurement.value).expect("Failed to add memory B"); }
-    if measurement.unit == "KiB" { buffer.column_f64(prefix, measurement.value * 1024.0).expect("Failed to add memory KiB"); }
-    if measurement.unit == "MiB" { buffer.column_f64(prefix, measurement.value * 1024.0 * 1024.0).expect("Failed to add memory MiB"); }
-    if measurement.unit == "GiB" { buffer.column_f64(prefix, measurement.value * 1024.0 * 1024.0 * 1024.0).expect("Failed to add memory GiB"); }
+    if measurement.unit == "B" { buffer.column_f64(column, measurement.value).expect("Failed to add memory B"); }
+    if measurement.unit == "KiB" { buffer.column_f64(column, measurement.value * 1024.0).expect("Failed to add memory KiB"); }
+    if measurement.unit == "MiB" { buffer.column_f64(column, measurement.value * 1024.0 * 1024.0).expect("Failed to add memory MiB"); }
+    if measurement.unit == "GiB" { buffer.column_f64(column, measurement.value * 1024.0 * 1024.0 * 1024.0).expect("Failed to add memory GiB"); }
   }
   
   for stat in &stats
   {
-    buffer.table(cli.table.as_str())?.
-        symbol("host", cli.host.clone())?.
-        symbol("container", stat.container.clone())?.
-        symbol("name", stat.name.clone())?.
-        column_str("id", stat.id.clone())?.
-        column_f64("cpu", stat.cpuPercentage)?.
-        column_f64("memory_percentage", stat.memoryPercentage)?.
-        column_i64("pids", stat.pids as i64)?;
+    buffer.table(table)?.
+        symbol(chost, cli.host.clone())?.
+        symbol(ccontainer, stat.container.clone())?.
+        symbol(cname, stat.name.clone())?.
+        column_str(cid, stat.id.clone())?.
+        column_f64(ccpu, stat.cpuPercentage)?.
+        column_f64(cmp, stat.memoryPercentage)?.
+        column_i64(cpids, stat.pids as i64)?;
     
     add_io(&mut buffer, &stat.blockIO, "block_io");
     add_io(&mut buffer, &stat.netIO, "net_io");
@@ -194,6 +202,17 @@ pub fn publish(cli: &Cli, stats: Vec<Stats>, time: DateTime<Utc>) -> Result<()>
 fn disk_usage(cli: &Cli, buf: &mut Buffer, time: DateTime<Utc>) -> Result<()>
 {
   if cli.disks.is_empty() { return Ok(()); }
+
+  let table = TableName::new(cli.disk_table.as_str())?;
+  let chost = ColumnName::new("host")?;
+  let cname = ColumnName::new("name")?;
+  let cfs = ColumnName::new("file_system")?;
+  let cmp = ColumnName::new("mount_point")?;
+  let ctype = ColumnName::new("type")?;
+  let cas = ColumnName::new("available_space")?;
+  let cpu = ColumnName::new("percentage_use")?;
+  let cr = ColumnName::new("read_bytes")?;
+  let cw = ColumnName::new("write_bytes")?;
   
   let disks = Disks::new_with_refreshed_list();
   for disk in disks.list()
@@ -202,16 +221,16 @@ fn disk_usage(cli: &Cli, buf: &mut Buffer, time: DateTime<Utc>) -> Result<()>
     {
       if disk.name() ==  OsString::from(name)
       {
-        buf.table(cli.disk_table.as_str())?.
-            symbol("host", cli.host.clone())?.
-            symbol("name", disk.name().to_str().unwrap().to_string())?.
-            symbol("file_system", disk.file_system().to_str().unwrap().to_string())?.
-            symbol("mount_point", disk.mount_point().to_str().unwrap().to_string())?.
-            symbol("type", disk.kind().to_string())?.
-            column_i64("available_space", disk.available_space() as i64)?.
-            column_f64("percentage_use", (disk.available_space() as f64)/(disk.total_space() as f64) * 100.0)?.
-            column_i64("read_bytes", disk.usage().read_bytes as i64)?.
-            column_i64("write_bytes", disk.usage().written_bytes as i64)?.
+        buf.table(table)?.
+            symbol(chost, cli.host.clone())?.
+            symbol(cname, disk.name().to_str().unwrap().to_string())?.
+            symbol(cfs, disk.file_system().to_str().unwrap().to_string())?.
+            symbol(cmp, disk.mount_point().to_str().unwrap().to_string())?.
+            symbol(ctype, disk.kind().to_string())?.
+            column_i64(cas, disk.available_space() as i64)?.
+            column_f64(cpu, (disk.available_space() as f64)/(disk.total_space() as f64) * 100.0)?.
+            column_i64(cr, disk.usage().read_bytes as i64)?.
+            column_i64(cw, disk.usage().written_bytes as i64)?.
             at(TimestampNanos::from_datetime(time)?)?;
         info!("Added disk statistics for {} on {}.", name, cli.host);
       }

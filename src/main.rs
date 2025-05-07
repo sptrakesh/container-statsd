@@ -38,6 +38,21 @@ enum Mode {
   Max
 }
 
+#[derive(
+  clap::ValueEnum, Clone, Default, Debug, Deserialize, PartialEq, Eq, Copy
+)]
+#[serde(rename_all = "lowercase")]
+#[allow(non_camel_case_types)]
+enum Protocol {
+  /// Connect to QuestDB via TCP
+  #[default]
+  tcp,
+  /// Connect to QuestDB via HTTP
+  http,
+  /// Connect to QuestDB via HTTPS
+  https
+}
+
 #[cfg(target_os = "linux")]
 #[derive(
   clap::ValueEnum, Clone, Default, Debug, Deserialize, PartialEq, Eq, Copy
@@ -63,20 +78,26 @@ struct Cli {
   /// The host name to add to the published data.  Generally the name of the host docker daemon is running on.
   #[arg(short = 'n', long = "node")]
   host: String,
-  /// The QuestDB host to publish to.  Defaults to localhost.
+  /// The QuestDB host to publish to.
   #[arg(short, long, default_value = "localhost")]
   questdb: String,
-  /// The series name to publish to.  Defaults to containerStats.
-  #[arg(short, long, default_value = "containerStats")]
+  /// The series name to publish to.
+  #[arg(short = 's', long = "stats-table", default_value = "containerStats")]
   table: String,
+  /// The QuestDB ILP transport protocol to use.
+  #[arg(short = 't', long = "transport-protocol", default_value_t, value_enum)]
+  protocol: Protocol,
+  /// The port on which the QuestDB ILP service is listening.
+  #[arg(short, long, default_value_t = 9009)]
+  port: u16,
   #[cfg(target_os = "linux")]
   /// Enable systemd watchdog notifications.  Enable only if run via systemd.
   #[arg(short, long, default_value_t, value_enum)]
   watchdog: Watchdog,
-  /// The mode to use when publishing to QuestDB.  Defaults to avg.
+  /// The mode to use when publishing to QuestDB.
   #[arg(short, long, default_value_t, value_enum)]
   mode: Mode,
-  /// The interval in minutes for which statistics are gathered.  Defaults to 5 minutes.  Must be between 1 and 15.
+  /// The interval in minutes for which statistics are gathered.  Must be between 1 and 15.
   #[arg(short, long, default_value_t = 5, value_parser=valid_interval)]
   interval: u8
 }
